@@ -2,8 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { DEFAULT_RPC_HEALTH_TIMEOUT_MS, rpcHealthCheck } from "../src/utils/rpc-health";
 
-const jsonResponse = (body: unknown, status = 200): Response =>
-  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 const fetcherReturning = (body: unknown, status = 200): typeof fetch => (async () => jsonResponse(body, status)) as typeof fetch;
 
@@ -95,6 +94,25 @@ describe("rpcHealthCheck", () => {
     const result = await pending;
 
     expect(result.status).toBe("aborted");
+  });
+
+  it("times out when response headers resolve but response body decoding hangs", async () => {
+    const hangingBodyFetcher = (async () => {
+      const stream = new ReadableStream({
+        start() {
+          // Never emit chunks and never close
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    const result = await rpcHealthCheck("https://rpc.example", { timeoutMs: 15, fetcher: hangingBodyFetcher });
+
+    expect(result.status).toBe("timeout");
+    expect(result.error).toContain("Timed out after 15ms");
   });
 
   it("exposes a short bounded default timeout", () => {

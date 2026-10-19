@@ -52,14 +52,28 @@ export async function rpcHealthCheck(rpcUrl: string, options: RpcHealthCheckOpti
 
   const controller = new AbortController();
   let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      reject(new Error(`Timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  let rejectAbort: ((reason?: unknown) => void) | undefined;
+  const abortPromise = new Promise<never>((_, reject) => {
+    rejectAbort = reject;
+  });
+
+  const onCallerAbort = () => {
     controller.abort();
-  }, timeoutMs);
-  const onCallerAbort = () => controller.abort();
+    rejectAbort?.(new Error("Health check was aborted"));
+  };
   signal?.addEventListener("abort", onCallerAbort);
 
-  try {
+  const fetchAndDecode = async (): Promise<RpcHealthCheckResult> => {
     const response = await fetcher(rpcUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -98,6 +112,10 @@ export async function rpcHealthCheck(rpcUrl: string, options: RpcHealthCheckOpti
     }
 
     return { status: "healthy", rpcUrl, chainId: parsed.chainId, chainIdHex: parsed.chainIdHex, latencyMs: elapsed() };
+  };
+
+  try {
+    return await Promise.race([fetchAndDecode(), timeoutPromise, abortPromise]);
   } catch (error) {
     const status: RpcHealthStatus = timedOut ? "timeout" : signal?.aborted ? "aborted" : "unreachable";
     return {

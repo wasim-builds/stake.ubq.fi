@@ -14,6 +14,7 @@ export type InitializeRpcRuntimeOptions = {
   expectedChainId?: number;
   fetcher?: typeof fetch;
   localNode?: boolean;
+  timeoutMs?: number;
 };
 
 const MAINNET_CHAIN_ID = 1;
@@ -69,7 +70,7 @@ export async function initializeRpcRuntime(options: InitializeRpcRuntimeOptions 
     const result = await rpcHealthCheck(getChainRpcUrl(baseUrl, expectedChainId, localNode), {
       expectedChainId,
       fetcher: options.fetcher,
-      timeoutMs: DEFAULT_RPC_HEALTH_TIMEOUT_MS,
+      timeoutMs: options.timeoutMs ?? DEFAULT_RPC_HEALTH_TIMEOUT_MS,
     });
 
     if (currentGeneration !== generation) {

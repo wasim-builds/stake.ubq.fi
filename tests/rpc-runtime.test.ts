@@ -3,8 +3,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { LOCAL_NODE_RPC_URL, RPC_URL } from "../src/constants/config";
 import { __resetRpcRuntimeForTests, getResolvedRpcBaseUrl, getRpcRuntimeState, initializeRpcRuntime } from "../src/utils/rpc-runtime";
 
-const jsonResponse = (body: unknown, status = 200): Response =>
-  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 const healthyFetcher = (async () => jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x1" })) as typeof fetch;
 
@@ -54,6 +53,41 @@ describe("initializeRpcRuntime", () => {
     expect(probed).toEqual(["https://primary.example/1", "https://fallback.example/1"]);
     expect(state.resolvedRpcUrl).toBe("https://fallback.example");
     expect(getResolvedRpcBaseUrl()).toBe("https://fallback.example");
+    expect(state.lastStatus).toBe("healthy");
+    expect(state.recentErrorCount).toBe(1);
+  });
+
+  it("tries the next candidate when primary candidate hangs on response body decoding", async () => {
+    const probed: string[] = [];
+    const fetcher = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      probed.push(url);
+      if (url.startsWith("https://hanging-body.example")) {
+        const stream = new ReadableStream({
+          start() {
+            // Never enqueue chunks and never close
+          },
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x1" });
+    }) as typeof fetch;
+
+    await initializeRpcRuntime({
+      candidates: ["https://hanging-body.example", "https://healthy.example"],
+      expectedChainId: 1,
+      localNode: false,
+      fetcher,
+      timeoutMs: 15,
+    });
+
+    const state = getRpcRuntimeState();
+    expect(probed).toEqual(["https://hanging-body.example/1", "https://healthy.example/1"]);
+    expect(state.resolvedRpcUrl).toBe("https://healthy.example");
+    expect(getResolvedRpcBaseUrl()).toBe("https://healthy.example");
     expect(state.lastStatus).toBe("healthy");
     expect(state.recentErrorCount).toBe(1);
   });
