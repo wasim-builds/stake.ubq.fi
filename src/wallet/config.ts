@@ -1,5 +1,5 @@
 import { mainnet, anvil, type Chain } from "viem/chains";
-import { fallback } from "viem";
+import { createTransport, fallback } from "viem";
 import { createConfig, http, injected, type Transport } from "wagmi";
 import { getChainRpcUrl, isLocalNode, RPC_FALLBACK_URLS, RPC_URL } from "../constants/config";
 import { getResolvedRpcBaseUrl } from "../utils/rpc-runtime";
@@ -35,22 +35,41 @@ export function getRpcTransportUrls(
   return [...new Set(rpcUrls.map((currentRpcUrl) => getChainRpcUrl(currentRpcUrl, chain.id, localNode)))];
 }
 
-function createRpcTransport(chain: Chain): Transport {
-  const selectedRpcUrl = getResolvedRpcBaseUrl() || RPC_URL;
-  const rpcTransports = getRpcTransportUrls(chain, { rpcUrl: selectedRpcUrl }).map((rpcUrl) =>
-    http(rpcUrl, {
-      batch: !isLocalNode,
-      timeout: RPC_TRANSPORT_TIMEOUT_MS,
-    })
-  );
+function createRpcTransport(rpcUrl: string): Transport {
+  return http(rpcUrl, {
+    batch: !isLocalNode,
+    timeout: RPC_TRANSPORT_TIMEOUT_MS,
+  });
+}
 
-  if (rpcTransports.length === 1) return rpcTransports[0];
-  return fallback(rpcTransports, { rank: false });
+export function dynamicRpcTransport(chain: Chain): Transport {
+  return (params) => {
+    return createTransport({
+      key: "dynamic-rpc",
+      name: "Dynamic RPC Transport",
+      type: "dynamicRpc",
+      timeout: RPC_TRANSPORT_TIMEOUT_MS,
+      retryCount: params.retryCount,
+      async request(args) {
+        const selectedRpcUrl = getResolvedRpcBaseUrl() || RPC_URL;
+        const rpcUrls = getRpcTransportUrls(chain, { rpcUrl: selectedRpcUrl });
+        const transportFactories = rpcUrls.map((url) => createRpcTransport(url));
+
+        if (transportFactories.length === 1) {
+          const client = transportFactories[0](params);
+          return client.request(args);
+        }
+
+        const fallbackTransport = fallback(transportFactories, { rank: false })(params);
+        return fallbackTransport.request(args);
+      },
+    });
+  };
 }
 
 // Anvil doesn't support URLs like http://localhost:8545/31337
 const transports = supportedChains.reduce<TransportsMap>((acc, chain) => {
-  acc[chain.id] = createRpcTransport(chain);
+  acc[chain.id] = dynamicRpcTransport(chain);
   return acc;
 }, {} as TransportsMap);
 

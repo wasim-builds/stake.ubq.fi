@@ -51,6 +51,10 @@ export const __resetRpcRuntimeForTests = () => {
   listeners.forEach((listener) => listener());
 };
 
+export const __setResolvedRpcBaseUrlForTests = (url: string) => {
+  publish({ resolvedRpcUrl: url });
+};
+
 /**
  * Probes the candidate base URLs in order and keeps the first healthy one.
  * Every run starts from a clean slate, and a run that is superseded by a newer
