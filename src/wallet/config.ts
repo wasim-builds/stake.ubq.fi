@@ -49,7 +49,7 @@ export function dynamicRpcTransport(chain: Chain): Transport {
       name: "Dynamic RPC Transport",
       type: "dynamicRpc",
       timeout: RPC_TRANSPORT_TIMEOUT_MS,
-      retryCount: params.retryCount,
+      retryCount: 0,
       async request(args) {
         const selectedRpcUrl = getResolvedRpcBaseUrl() || RPC_URL;
         const rpcUrls = getRpcTransportUrls(chain, { rpcUrl: selectedRpcUrl });
@@ -60,7 +60,10 @@ export function dynamicRpcTransport(chain: Chain): Transport {
           return client.request(args);
         }
 
-        const fallbackTransport = fallback(transportFactories, { rank: false })(params);
+        const fallbackTransport = fallback(transportFactories, {
+          rank: false,
+          retryCount: params.retryCount,
+        })(params);
         return fallbackTransport.request(args);
       },
     });
