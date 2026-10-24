@@ -35,6 +35,12 @@ export function getRpcTransportUrls(
   return [...new Set(rpcUrls.map((currentRpcUrl) => getChainRpcUrl(currentRpcUrl, chain.id, localNode)))];
 }
 
+/**
+ * Creates an HTTP transport instance for a given RPC URL.
+ *
+ * @param rpcUrl The target RPC endpoint URL.
+ * @returns An HTTP transport configured for the current environment.
+ */
 function createRpcTransport(rpcUrl: string): Transport {
   return http(rpcUrl, {
     batch: !isLocalNode,
@@ -42,6 +48,13 @@ function createRpcTransport(rpcUrl: string): Transport {
   });
 }
 
+/**
+ * Creates a dynamic RPC transport for a chain that resolves the active RPC endpoint
+ * per-request and falls back cleanly if multiple URLs are configured.
+ *
+ * @param chain Target chain configuration.
+ * @returns A viem transport factory.
+ */
 export function dynamicRpcTransport(chain: Chain): Transport {
   return (params) => {
     return createTransport({

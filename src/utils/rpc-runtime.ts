@@ -51,6 +51,11 @@ export const __resetRpcRuntimeForTests = () => {
   listeners.forEach((listener) => listener());
 };
 
+/**
+ * Sets the active resolved RPC base URL for testing purposes.
+ *
+ * @param url The mock resolved RPC base URL.
+ */
 export const __setResolvedRpcBaseUrlForTests = (url: string) => {
   publish({ resolvedRpcUrl: url });
 };
